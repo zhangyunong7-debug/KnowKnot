@@ -40,11 +40,11 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
+    const deepseekApiKey = Deno.env.get('DEEPSEEK_API_KEY');
+    if (!deepseekApiKey) {
+      throw new Error('DeepSeek API key not configured');
     }
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    const openai = new OpenAI({ apiKey: deepseekApiKey, baseURL: 'https://api.deepseek.com' });
 
     // 获取相关笔记和总结
     let query = supabase
@@ -132,7 +132,7 @@ serve(async (req) => {
     }`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'deepseek-chat',
       messages: [
         {
           role: 'system',

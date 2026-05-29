@@ -2,50 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CSS 变量定义 */
+@import 'katex/dist/katex.min.css';
+
+/* OneNote 风格 CSS 变量 */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  --background: 36 33% 97%;
+  --foreground: 260 10% 16%;
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card-foreground: 260 10% 16%;
   --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 199 89% 48%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 199 89% 48%;
-  --radius: 0.5rem;
+  --popover-foreground: 260 10% 16%;
+  --primary: 288 38% 35%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 280 10% 95%;
+  --secondary-foreground: 260 10% 20%;
+  --muted: 30 10% 95%;
+  --muted-foreground: 260 6% 50%;
+  --accent: 45 93% 47%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 30 10% 90%;
+  --input: 30 10% 90%;
+  --ring: 288 38% 35%;
+  --radius: 0.375rem;
+  --sidebar-rail: 280 40% 25%;
+  --sidebar-rail-hover: 280 40% 32%;
+  --sidebar-rail-active: 288 38% 40%;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 199 89% 48%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 199 89% 48%;
+  --background: 260 10% 8%;
+  --foreground: 30 20% 92%;
+  --card: 260 10% 12%;
+  --card-foreground: 30 20% 92%;
+  --popover: 260 10% 12%;
+  --popover-foreground: 30 20% 92%;
+  --primary: 288 38% 45%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 260 10% 16%;
+  --secondary-foreground: 30 20% 92%;
+  --muted: 260 10% 16%;
+  --muted-foreground: 260 8% 60%;
+  --accent: 45 93% 47%;
+  --accent-foreground: 260 10% 8%;
+  --destructive: 0 62% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 260 10% 18%;
+  --input: 260 10% 18%;
+  --ring: 288 38% 45%;
+  --sidebar-rail: 280 35% 16%;
+  --sidebar-rail-hover: 280 35% 22%;
+  --sidebar-rail-active: 288 38% 30%;
 }
 
 @layer base {
@@ -59,8 +67,8 @@
 
 /* 自定义滚动条 */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -145,9 +153,9 @@
 
 /* 思维导图节点样式 */
 .mindmap-node {
-  @apply px-4 py-2 rounded-lg shadow-md cursor-pointer;
+  @apply px-4 py-2 rounded-md shadow-sm cursor-pointer;
   @apply transition-all duration-200;
-  @apply hover:shadow-lg hover:scale-105;
+  @apply hover:shadow-md hover:scale-105;
 }
 
 .mindmap-node-root {
@@ -186,7 +194,7 @@
 /* 拖拽区域样式 */
 .dropzone {
   @apply border-2 border-dashed border-gray-300 dark:border-gray-600;
-  @apply rounded-lg transition-colors duration-200;
+  @apply rounded-md transition-colors duration-200;
 }
 
 .dropzone.active {
@@ -196,6 +204,7 @@
 /* 标签样式 */
 .tag-pill {
   @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  @apply hover:shadow-sm transition-all duration-150;
 }
 
 .tag-knowledge_point {
@@ -218,9 +227,39 @@
   @apply bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300;
 }
 
+/* 标签输入框样式 */
+.tag-input {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs;
+  @apply border border-dashed border-muted-foreground/30 bg-transparent;
+  @apply focus-within:border-primary focus-within:bg-primary/5 transition-all duration-150;
+}
+
 /* 响应式工具 */
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* 笔记预览区样式 */
+  .note-preview h1 { @apply text-xl font-bold mb-3 mt-5; }
+  .note-preview h2 { @apply text-lg font-semibold mb-2 mt-4; }
+  .note-preview h3 { @apply text-base font-semibold mb-2 mt-3; }
+  .note-preview strong { @apply font-bold; }
+  .note-preview em { @apply italic; }
+  .note-preview del { @apply line-through text-muted-foreground; }
+  .note-preview mark { @apply bg-yellow-200 dark:bg-yellow-700/50 px-0.5 rounded; }
+  .note-preview u { @apply underline decoration-2 decoration-primary/50; }
+  .note-preview code { @apply bg-muted px-1.5 py-0.5 rounded text-xs font-mono; }
+  .note-preview pre { @apply bg-muted p-4 rounded-lg overflow-x-auto text-xs my-3; }
+  .note-preview pre code { @apply bg-transparent p-0; }
+  .note-preview blockquote { @apply border-l-4 border-primary/40 pl-4 italic text-muted-foreground my-3; }
+  .note-preview ul { @apply list-disc list-inside my-2 space-y-1; }
+  .note-preview ol { @apply list-decimal list-inside my-2 space-y-1; }
+  .note-preview hr { @apply border-border my-4; }
+  .note-preview table { @apply border-collapse border border-border my-3 w-full; }
+  .note-preview th { @apply bg-muted font-semibold border border-border px-3 py-1.5 text-left; }
+  .note-preview td { @apply border border-border px-3 py-1.5; }
+
+  /* KaTeX 公式样式 */
+  .note-preview .katex-display { @apply my-4 overflow-x-auto py-2; }
 }

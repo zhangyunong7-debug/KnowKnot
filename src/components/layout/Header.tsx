@@ -23,45 +23,51 @@ export function Header({ user }: HeaderProps) {
   const { theme, setTheme } = useTheme()
 
   return (
-    <header className="flex items-center justify-between h-16 px-6 border-b bg-card">
+    <header className="flex items-center justify-between h-12 px-6 bg-[hsl(var(--sidebar-rail))]">
       {/* 搜索栏 */}
-      <div className="flex-1 max-w-md">
+      <div className="flex-1 max-w-sm">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
           <Input
             type="search"
             placeholder="搜索笔记、题目、标签..."
-            className="pl-10 bg-muted/50 border-0 focus-visible:ring-1"
+            className="pl-9 h-8 bg-white/10 border-0 text-white placeholder:text-white/40 focus-visible:ring-1 focus-visible:ring-white/30 rounded-md text-sm"
           />
         </div>
       </div>
 
       {/* 右侧操作 */}
-      <div className="flex items-center gap-2">
-        {/* 主题切换 */}
-        <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="h-8 w-8 text-white/65 hover:text-white hover:bg-white/10"
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
 
-        {/* 通知 */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-white/65 hover:text-white hover:bg-white/10 relative"
+        >
+          <Bell className="w-4 h-4" />
+          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-accent rounded-full" />
         </Button>
 
-        {/* 用户菜单 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full ml-1 hover:bg-white/10">
               {user?.avatar_url ? (
                 <img
                   src={user.avatar_url}
                   alt={user.username || '用户'}
-                  className="w-8 h-8 rounded-full object-cover"
+                  className="w-7 h-7 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="w-4 h-4 text-primary" />
+                <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-white" />
                 </div>
               )}
             </Button>

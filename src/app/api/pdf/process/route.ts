@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
-import { createCanvas } from '@napi-rs/canvas'
 import supabaseAdmin from '@/lib/supabase/admin'
+import { splitQuestions } from '@/lib/pdf/split-questions'
 
 let pdfjsLib: any = null
 
@@ -19,7 +18,7 @@ async function downloadPdfBuffer(url: string): Promise<ArrayBuffer> {
 
   const urlObj = new URL(url)
   const pathParts = urlObj.pathname.split('/')
-  const bucketIndex = pathParts.findIndex(p => p === 'pdfs')
+  const bucketIndex = pathParts.findIndex((p) => p === 'pdfs')
   if (bucketIndex === -1) throw new Error('Cannot parse storage path from URL')
   const filePath = pathParts.slice(bucketIndex + 1).join('/')
   const { data, error } = await supabaseAdmin.storage.from('pdfs').download(filePath)
@@ -36,40 +35,70 @@ async function extractTextFromPdf(buffer: ArrayBuffer): Promise<string> {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
     const content = await page.getTextContent()
-    const text = content.items.map((item: any) => item.str).join(' ')
+    let text = ''
+    for (const item of content.items as any[]) {
+      if (item.str !== undefined) {
+        text += item.str
+        if (item.hasEOL) text += '\n'
+      }
+    }
     pages.push(text)
   }
 
   return pages.join('\n\n')
 }
 
-async function renderPagesAsImages(buffer: ArrayBuffer, maxPages = 10): Promise<{ base64: string; pageNum: number }[]> {
-  const data = new Uint8Array(buffer.slice(0))
-  const pdfjs = await getPdfjs()
-  const doc = await pdfjs.getDocument({ data }).promise
-  const pageCount = Math.min(doc.numPages, maxPages)
-  const images: { base64: string; pageNum: number }[] = []
+async function ocrPdfWithOcrSpace(buffer: ArrayBuffer): Promise<string> {
+  const apiKey = process.env.OCR_SPACE_API_KEY
+  if (!apiKey) throw new Error('OCR_SPACE_API_KEY not configured')
 
-  for (let i = 1; i <= pageCount; i++) {
-    const page = await doc.getPage(i)
-    const viewport = page.getViewport({ scale: 1.5 })
+  const { createCanvas } = await import('@napi-rs/canvas')
+  const pdfjs = await getPdfjs()
+  const data = new Uint8Array(buffer.slice(0))
+  const doc = await pdfjs.getDocument({ data }).promise
+
+  const pageTasks = Array.from({ length: doc.numPages }, async (_, i) => {
+    const pageNum = i + 1
+    const page = await doc.getPage(pageNum)
+    const viewport = page.getViewport({ scale: 2.0 })
+
     const canvas = createCanvas(viewport.width, viewport.height)
     const ctx = canvas.getContext('2d')
-
     await page.render({ canvasContext: ctx as any, viewport }).promise
-    images.push({
-      pageNum: i,
-      base64: canvas.toBuffer('image/png').toString('base64'),
+
+    const pngBuffer = canvas.toBuffer('image/png')
+
+    const formData = new FormData()
+    const blob = new Blob([pngBuffer], { type: 'image/png' })
+    formData.append('file', blob, `page-${pageNum}.png`)
+    formData.append('language', 'chs')
+    formData.append('isOverlayRequired', 'false')
+    formData.append('OCREngine', '2')
+
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: { apikey: apiKey },
+      body: formData,
     })
-  }
 
-  return images
+    if (!response.ok) {
+      throw new Error(`OCR.space 第${pageNum}页返回 ${response.status}`)
+    }
+
+    const result = await response.json()
+    if (result.OCRExitCode !== 1) {
+      throw new Error(result.ErrorMessage || `OCR.space 第${pageNum}页识别失败`)
+    }
+
+    const pageText = result.ParsedResults.map((r: any) => r.ParsedText).join('\n')
+    console.log(`OCR page ${pageNum}/${doc.numPages} done (${pageText.length} chars)`)
+    return { pageNum, text: pageText }
+  })
+
+  const results = await Promise.all(pageTasks)
+  results.sort((a, b) => a.pageNum - b.pageNum)
+  return results.map((r) => r.text).join('\n\n')
 }
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-  baseURL: process.env.OPENAI_BASE_URL || undefined,
-})
 
 interface QuestionInput {
   order: number
@@ -79,19 +108,24 @@ interface QuestionInput {
   correctAnswer: string | null
 }
 
-async function insertQuestions(noteId: string, userId: string, questions: QuestionInput[], pdfUrl: string) {
+async function insertQuestions(
+  noteId: string,
+  userId: string,
+  questions: QuestionInput[],
+  pdfSourceId: string | null,
+  offset: number,
+) {
   let insertedCount = 0
   for (const q of questions) {
-    const { error: blockError } = await supabaseAdmin
-      .from('question_blocks')
-      .insert({
-        note_id: noteId,
-        block_order: q.order || insertedCount + 1,
-        question_type: q.type || 'unknown',
-        question_text: q.text || '无内容',
-        options: q.options || null,
-        correct_answer: q.correctAnswer || null,
-      })
+    const { error: blockError } = await supabaseAdmin.from('question_blocks').insert({
+      note_id: noteId,
+      block_order: offset + q.order,
+      question_type: q.type,
+      question_text: q.text,
+      options: q.options || null,
+      correct_answer: q.correctAnswer || null,
+      source_pdf_id: pdfSourceId,
+    })
 
     if (blockError) {
       console.error('Error inserting question block:', blockError)
@@ -100,143 +134,125 @@ async function insertQuestions(noteId: string, userId: string, questions: Questi
     insertedCount++
   }
 
-  await supabaseAdmin
-    .from('notes')
-    .update({ status: 'ready' })
-    .eq('id', noteId)
-
-  await supabaseAdmin.from('activity_logs').insert({
-    user_id: userId,
-    action: 'import_pdf',
-    entity_type: 'note',
-    entity_id: noteId,
-    metadata: { totalQuestions: insertedCount, pdfUrl },
-  })
-
   return insertedCount
 }
 
-const QUESTION_SYSTEM_PROMPT = `你是一个专业的试卷分析AI。请识别并切分每道试题。
-
-返回JSON格式：
-{
-  "questions": [
-    {
-      "order": 题号,
-      "type": "选择题|填空题|解答题|判断题|其他",
-      "text": "完整的题干内容（保留公式和符号）",
-      "options": ["A. ...", "B. ..."] 或 null,
-      "correctAnswer": "答案" 或 null
-    }
-  ]
-}
-
-注意：
-- 保留完整的公式和数学符号
-- 识别试卷中的大题和小题
-- 如果文字中有答案解析，请一并保留`
-
 export async function POST(request: NextRequest) {
   try {
-    const { noteId, pdfUrl, userId } = await request.json()
+    const { noteId, pdfUrl, pdfName, userId } = await request.json()
 
     if (!noteId || !pdfUrl || !userId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
-    // 1. 下载 PDF
+    // 1. 创建 pdf_sources 记录
+    const { data: pdfSource, error: sourceError } = await supabaseAdmin
+      .from('pdf_sources')
+      .insert({
+        note_id: noteId,
+        pdf_url: pdfUrl,
+        pdf_name: pdfName || pdfUrl.split('/').pop() || 'unknown.pdf',
+        status: 'processing',
+      })
+      .select()
+      .single()
+
+    if (sourceError) {
+      console.error('Error creating pdf source:', sourceError)
+      return NextResponse.json({ error: 'Failed to create PDF source' }, { status: 500 })
+    }
+
+    const pdfSourceId = pdfSource.id
+
+    // 2. 下载 PDF
     console.log('Downloading PDF...')
     const pdfBuffer = await downloadPdfBuffer(pdfUrl)
 
-    // 2. 尝试文字提取
+    // 3. 先尝试文字提取
     console.log('Extracting text from PDF...')
     const pdfText = await extractTextFromPdf(pdfBuffer)
 
-    let questions: QuestionInput[] = []
-    let usedOcr = false
+    let rawText: string
 
     if (pdfText && pdfText.trim().length >= 10) {
-      // 文字提取成功，用文本模式切分题目
-      await supabaseAdmin
-        .from('notes')
-        .update({ status: 'processing' })
-        .eq('id', noteId)
-
-      console.log('Splitting questions with AI...')
-      const textSample = pdfText.substring(0, 15000)
-
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: QUESTION_SYSTEM_PROMPT },
-          { role: 'user', content: textSample },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-      })
-
-      const result = JSON.parse(completion.choices[0].message.content || '{}')
-      questions = result.questions || []
+      rawText = pdfText
     } else {
-      // 3. 文字提取失败，用 OCR 视觉识别
-      console.log('Text extraction failed, using OCR vision...')
-      await supabaseAdmin
-        .from('notes')
-        .update({ status: 'processing' })
-        .eq('id', noteId)
-
-      const pageImages = await renderPagesAsImages(pdfBuffer, 8)
-      console.log(`Rendered ${pageImages.length} pages for OCR`)
-
-      const imageContents = pageImages.map((img) => ({
-        type: 'image_url' as const,
-        image_url: {
-          url: `data:image/png;base64,${img.base64}`,
-          detail: 'low' as const,
-        },
-      }))
-
-      const ocrCompletion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
+      // 文字提取失败，走 OCR
+      console.log('Text extraction empty, trying OCR.space...')
+      try {
+        rawText = await ocrPdfWithOcrSpace(pdfBuffer)
+        if (!rawText || rawText.trim().length < 10) {
+          throw new Error('OCR returned insufficient text')
+        }
+      } catch (ocrError) {
+        console.error('OCR.space error:', ocrError)
+        await supabaseAdmin.from('pdf_sources').update({ status: 'error' }).eq('id', pdfSourceId)
+        return NextResponse.json(
           {
-            role: 'system',
-            content: `${QUESTION_SYSTEM_PROMPT}
-
-这是一份扫描版或图片型 PDF。请先识别图片中的文字（OCR），再切分试题。
-图片按页码顺序排列。`,
+            success: false,
+            error: 'OCR 识别失败: ' + (ocrError instanceof Error ? ocrError.message : '未知错误'),
           },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: '请识别以下试卷图片中的题目：' },
-              ...imageContents,
-            ],
-          },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-      })
-
-      const result = JSON.parse(ocrCompletion.choices[0].message.content || '{}')
-      questions = result.questions || []
-      usedOcr = true
+          { status: 400 },
+        )
+      }
     }
 
-    // 4. 插入题目
-    const insertedCount = await insertQuestions(noteId, userId, questions, pdfUrl)
+    // 4. 规则切分题目
+    console.log('Raw text preview (first 500 chars):', rawText.substring(0, 500))
+    console.log('Raw text length:', rawText.length)
+    console.log('Splitting questions via rule-based parser...')
+    const parsed = splitQuestions(rawText)
+    console.log('Parsed questions count:', parsed.length)
+
+    if (parsed.length === 0) {
+      await supabaseAdmin.from('pdf_sources').update({ status: 'error' }).eq('id', pdfSourceId)
+      const preview = rawText.substring(0, 300).replace(/\n/g, '↵')
+      return NextResponse.json(
+        {
+          success: false,
+          error: `未能识别到题目。OCR 识别的前 300 字符: "${preview}..."`,
+        },
+        { status: 400 },
+      )
+    }
+
+    // 5. 计算现有题目的最大 block_order，新题目追加其后
+    const { data: existingBlocks } = await supabaseAdmin
+      .from('question_blocks')
+      .select('block_order')
+      .eq('note_id', noteId)
+      .order('block_order', { ascending: false })
+      .limit(1)
+
+    const maxOrder = existingBlocks && existingBlocks.length > 0 ? existingBlocks[0].block_order : 0
+
+    const questions: QuestionInput[] = parsed.map((q) => ({
+      order: q.order,
+      type: q.type,
+      text: q.text,
+      options: q.options.length > 0 ? q.options : null,
+      correctAnswer: null,
+    }))
+
+    // 6. 写入数据库
+    const insertedCount = await insertQuestions(noteId, userId, questions, pdfSourceId, maxOrder)
+
+    // 7. 更新状态
+    await supabaseAdmin.from('pdf_sources').update({ status: 'ready' }).eq('id', pdfSourceId)
+    await supabaseAdmin.from('notes').update({ status: 'ready' }).eq('id', noteId)
 
     return NextResponse.json({
       success: true,
       noteId,
+      pdfSourceId,
       totalQuestions: insertedCount,
-      ...(usedOcr && { ocr: true, pagesProcessed: Math.min(8, questions.length > 0 ? 8 : 0) }),
+      method: 'rule-based',
     })
   } catch (error) {
     console.error('PDF processing error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

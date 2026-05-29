@@ -10,7 +10,13 @@
       "Bash(npx tsc *)",
       "Bash(netstat -ano)",
       "Bash(awk '{print $5}')",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(taskkill *)",
+      "Bash(cmd *)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl *)",
+      "Bash(node --loader ts-node/esm test-splitter.mjs)",
+      "Bash(npx tsx *)"
     ]
   }
 }

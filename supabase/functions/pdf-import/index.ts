@@ -1,5 +1,5 @@
 // Supabase Edge Function: PDF 智能导入和题目切分
-// 功能：解析 PDF 内容，调用 OpenAI API 智能切分试题
+// 功能：解析 PDF 内容，调用 DeepSeek API 智能切分试题
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -39,12 +39,12 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 初始化 OpenAI
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
+    // 初始化 DeepSeek
+    const deepseekApiKey = Deno.env.get('DEEPSEEK_API_KEY');
+    if (!deepseekApiKey) {
+      throw new Error('DeepSeek API key not configured');
     }
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    const openai = new OpenAI({ apiKey: deepseekApiKey, baseURL: 'https://api.deepseek.com' });
 
     // 下载 PDF 内容
     const pdfResponse = await fetch(pdfUrl);
@@ -54,9 +54,9 @@ serve(async (req) => {
     const pdfBuffer = await pdfResponse.arrayBuffer();
     const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
 
-    // 调用 OpenAI 解析 PDF 内容
+    // 调用 DeepSeek 解析 PDF 内容
     // 注意：实际项目中应该使用 PDF 解析库（如 pdf-parse）或云服务
-    // 这里演示如何调用 OpenAI API 进行题目切分
+    // 这里演示如何调用 DeepSeek API 进行题目切分
     const analysisPrompt = `你是一个专业的试卷分析AI。请分析以下PDF内容中的试题：
 
     1. 识别试卷标题和大题编号（如"一、选择题"、"二、填空题"等）
@@ -83,7 +83,7 @@ serve(async (req) => {
     PDF内容（Base64编码）: ${pdfBase64.substring(0, 5000)}...`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'deepseek-chat',
       messages: [
         {
           role: 'system',

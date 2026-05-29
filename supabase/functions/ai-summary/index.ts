@@ -38,11 +38,11 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
+    const deepseekApiKey = Deno.env.get('DEEPSEEK_API_KEY');
+    if (!deepseekApiKey) {
+      throw new Error('DeepSeek API key not configured');
     }
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    const openai = new OpenAI({ apiKey: deepseekApiKey, baseURL: 'https://api.deepseek.com' });
 
     // 构建总结提示
     const summaryPrompt = `请为以下试题生成解题总结：
@@ -71,7 +71,7 @@ serve(async (req) => {
     }`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'deepseek-chat',
       messages: [
         {
           role: 'system',

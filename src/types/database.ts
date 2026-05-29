@@ -100,6 +100,7 @@ export interface Database {
           is_locked: boolean
           difficulty: number | null
           time_spent_seconds: number | null
+          source_pdf_id: string | null
           created_at: string
           updated_at: string
         }
@@ -117,6 +118,7 @@ export interface Database {
           is_locked?: boolean
           difficulty?: number | null
           time_spent_seconds?: number | null
+          source_pdf_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -134,7 +136,33 @@ export interface Database {
           is_locked?: boolean
           difficulty?: number | null
           time_spent_seconds?: number | null
+          source_pdf_id?: string | null
           updated_at?: string
+        }
+      }
+      pdf_sources: {
+        Row: {
+          id: string
+          note_id: string
+          pdf_url: string
+          pdf_name: string
+          status: 'processing' | 'ready' | 'error'
+          imported_at: string
+        }
+        Insert: {
+          id?: string
+          note_id: string
+          pdf_url: string
+          pdf_name: string
+          status?: 'processing' | 'ready' | 'error'
+          imported_at?: string
+        }
+        Update: {
+          note_id?: string
+          pdf_url?: string
+          pdf_name?: string
+          status?: 'processing' | 'ready' | 'error'
+          imported_at?: string
         }
       }
       note_content_entries: {
@@ -509,3 +537,4 @@ export type Mindmap = Database['public']['Tables']['mindmaps']['Row']
 export type Collection = Database['public']['Tables']['collections']['Row']
 export type CollectionQuestion = Database['public']['Tables']['collection_questions']['Row']
 export type DailyPush = Database['public']['Tables']['daily_pushes']['Row']
+export type PdfSource = Database['public']['Tables']['pdf_sources']['Row']

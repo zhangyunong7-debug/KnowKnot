@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { formatDate } from '@/lib/utils'
 import { FileUploader } from '@/components/pdf/FileUploader'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '@/components/ui/Modal'
@@ -38,6 +39,8 @@ interface DashboardContentProps {
 export function DashboardContent({ user, recentNotes, stats }: DashboardContentProps) {
   const router = useRouter()
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showNewNoteModal, setShowNewNoteModal] = useState(false)
+  const [newNoteTitle, setNewNoteTitle] = useState('')
   const [importing, setImporting] = useState(false)
 
   const handleUploadComplete = async (url: string, file: File) => {
@@ -48,26 +51,22 @@ export function DashboardContent({ user, recentNotes, stats }: DashboardContentP
     setImporting(true)
 
     try {
-      // 1. 创建笔记记录
+      // 1. 创建笔记记录（使用 API）
       const noteTitle = file.name.replace(/\.(pdf|PDF)$/, '')
-      const { data: note, error: noteError } = await supabase
-        .from('notes')
-        .insert({
-          user_id: authUser.id,
-          title: noteTitle,
-          source_pdf_url: url,
-          source_pdf_name: file.name,
-          status: 'importing',
-        })
-        .select()
-        .single()
+      const noteRes = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: noteTitle }),
+      })
 
-      if (noteError || !note) {
-        console.error('Failed to create note:', noteError)
+      if (!noteRes.ok) {
         toast.error('创建笔记失败，请重试')
         setImporting(false)
         return
       }
+
+      const noteData = await noteRes.json()
+      const note = noteData.note
 
       // 2. 调用 PDF 处理 API 解析并切分题目
       const res = await fetch('/api/pdf/process', {
@@ -76,6 +75,7 @@ export function DashboardContent({ user, recentNotes, stats }: DashboardContentP
         body: JSON.stringify({
           noteId: note.id,
           pdfUrl: url,
+          pdfName: file.name,
           userId: authUser.id,
         }),
       })
@@ -87,14 +87,10 @@ export function DashboardContent({ user, recentNotes, stats }: DashboardContentP
 
       const result = await res.json()
 
-      if (result.ocr && result.totalQuestions > 0) {
-        toast.success(`已通过 OCR 识别 ${result.totalQuestions} 道题目`)
-      } else if (result.warning) {
-        toast.warning(result.warning)
-      }
-
-      if (result.totalQuestions === 0 && !result.warning) {
-        toast.error('未能从 PDF 中识别到题目，请确认 PDF 包含可识别的文字内容')
+      if (result.totalQuestions > 0) {
+        toast.success(`已识别 ${result.totalQuestions} 道题目`)
+      } else {
+        toast.warning('未能从 PDF 中识别到题目')
       }
 
       setImporting(false)
@@ -104,6 +100,34 @@ export function DashboardContent({ user, recentNotes, stats }: DashboardContentP
       console.error('PDF import error:', err)
       toast.error(err instanceof Error ? err.message : 'PDF 导入失败，请重试')
       setImporting(false)
+    }
+  }
+
+  const handleCreateNote = async () => {
+    if (!newNoteTitle.trim()) {
+      toast.error('请输入笔记标题')
+      return
+    }
+
+    try {
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newNoteTitle.trim() }),
+      })
+
+      if (!res.ok) {
+        toast.error('创建笔记失败')
+        return
+      }
+
+      const data = await res.json()
+      toast.success('笔记已创建')
+      setShowNewNoteModal(false)
+      setNewNoteTitle('')
+      router.push(`/notes/${data.note.id}`)
+    } catch (error) {
+      toast.error('创建失败')
     }
   }
 
@@ -119,10 +143,16 @@ export function DashboardContent({ user, recentNotes, stats }: DashboardContentP
             继续您的高效学习之旅
           </p>
         </div>
-        <Button onClick={() => setShowUploadModal(true)}>
-          <Upload className="w-4 h-4 mr-2" />
-          导入 PDF
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowNewNoteModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            新建笔记
+          </Button>
+          <Button onClick={() => setShowUploadModal(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            导入 PDF
+          </Button>
+        </div>
       </div>
 
       {/* 统计卡片 */}
@@ -272,7 +302,7 @@ export function DashboardContent({ user, recentNotes, stats }: DashboardContentP
           <ModalHeader>
             <ModalTitle>导入 PDF</ModalTitle>
             <ModalDescription>
-              上传您的试卷 PDF 文件，AI 将自动识别并切分题目
+              上传您的试卷 PDF 文件，将自动识别题号并切分题目
             </ModalDescription>
           </ModalHeader>
           <div className="py-4">

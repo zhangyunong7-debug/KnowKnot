@@ -26,10 +26,10 @@ export default async function NotePage({ params }: NotePageProps) {
     .eq('id', session.user.id)
     .single()
 
-  // 获取笔记详情
+  // 获取笔记详情（包含 PDF 来源）
   const { data: note, error } = await supabase
     .from('notes')
-    .select('*')
+    .select('*, pdf_sources(*)')
     .eq('id', id)
     .eq('user_id', session.user.id)
     .single()
